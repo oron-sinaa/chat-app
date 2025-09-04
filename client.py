@@ -8,7 +8,7 @@ if len(sys.argv) != 5:
     print("Usage: python client.py <user_id> <channel_id> <room_id> <server_port>")
     sys.exit(1)
 
-user_id, channel_id, room_id, server_port = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+user_id, channel_id, room_id, server_port = str(sys.argv[1]), str(sys.argv[2]), str(sys.argv[3]), sys.argv[4]
 
 SERVER_URL = f"ws://localhost:{server_port}/chat"
 

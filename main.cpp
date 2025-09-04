@@ -20,6 +20,7 @@ struct PerSocketData {
     std::string user_id;
     std::string channel_id;
     std::string room_id;
+    size_t rate_limit_nacks = 0;
 };
 
 // ---- Global state ----
@@ -74,7 +75,7 @@ void broadcast(const std::string &channel,
     }
 }
 
-// ---- Handle incoming messages with strict schema validation ----
+// ---- Handle incoming messages with rate limiting and disconnect on excessive violations ----
 void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                    std::string_view raw)
 {
@@ -82,8 +83,6 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
 
     // --- Validate message length ---
     if (raw.size() > MAX_CLIENT_MSG) {
-        std::cerr << "[WARN] Message rejected: exceeds "
-                  << MAX_CLIENT_MSG << " bytes (" << raw.size() << " bytes)\n";
         nlohmann::json nack = {
             {"action", "send_nack"},
             {"reason", "message_too_large"},
@@ -93,10 +92,8 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
         return;
     }
 
-    // --- Parse JSON ---
     auto j = nlohmann::json::parse(raw, nullptr, false);
     if (j.is_discarded()) {
-        std::cerr << "[WARN] Invalid JSON\n";
         nlohmann::json nack = {
             {"action", "send_nack"},
             {"reason", "invalid_json"},
@@ -109,9 +106,9 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
     auto *ud = ws->getUserData();
     std::string action = j.value("action", "");
 
-    // ---- Strict schema validation helper ----
+    // ---- Schema validation (unchanged) ----
     auto validate_schema_strict = [&](const std::initializer_list<std::pair<std::string, std::string>> &fields) -> bool {
-        if (j.size() != fields.size()) return false;  // must have exactly required number of keys
+        if (j.size() != fields.size()) return false;
         for (auto &[key, type] : fields) {
             if (!j.contains(key)) return false;
             if (type == "string" && !j[key].is_string()) return false;
@@ -121,18 +118,63 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
         return true;
     };
 
-    // ---- Validate schema per action ----
-    if (action == "join") {
-        if (!validate_schema_strict({{"action", "string"}, {"user_id", "string"}, {"channel_id", "string"}, {"room_id", "string"}})) {
+    // ---- Rate limiting applied only to "send" ----
+    if (action == "send") {
+        if (!validate_schema_strict({{"action", "string"}, {"payload", "string"}})) {
             nlohmann::json nack = {
                 {"action", "send_nack"},
-                {"reason", "invalid_join_schema"},
+                {"reason", "invalid_send_schema"},
                 {"timestamp", current_timestamp()}
             };
             ws->send(nack.dump(), uWS::OpCode::TEXT);
             return;
         }
 
+        // ---- RATE LIMITING ----
+        static std::unordered_map<std::string, std::deque<std::chrono::steady_clock::time_point>> user_message_times;
+        constexpr size_t MAX_MESSAGES = 5; // per WINDOW
+        constexpr auto WINDOW = std::chrono::seconds(1);
+
+        auto now = std::chrono::steady_clock::now();
+        auto &times = user_message_times[ud->user_id];
+        times.push_back(now);
+
+        // Remove old timestamps
+        while (!times.empty() && now - times.front() > WINDOW) times.pop_front();
+
+        if (times.size() > MAX_MESSAGES) {
+            ud->rate_limit_nacks++; // increment counter
+
+            nlohmann::json nack = {
+                {"action", "send_nack"},
+                {"reason", "rate_limited"},
+                {"timestamp", current_timestamp()}
+            };
+            ws->send(nack.dump(), uWS::OpCode::TEXT);
+
+            // Disconnect if exceeded 20 nacks
+            if (ud->rate_limit_nacks > 20) {
+                std::cout << "[WARN] User " << ud->user_id
+                          << " disconnected due to excessive rate limiting\n";
+                ws->close();
+            }
+            return;
+        }
+        // ---- END RATE LIMITING ----
+    }
+    else if (action == "disconnect") {
+        if (!validate_schema_strict({{"action", "string"}})) {
+            nlohmann::json nack = {
+                {"action", "send_nack"},
+                {"reason", "invalid_disconnect_schema"},
+                {"timestamp", current_timestamp()}
+            };
+            ws->send(nack.dump(), uWS::OpCode::TEXT);
+            return;
+        }
+        // No rate limit on disconnect
+    }
+    else if (action == "join") {
         ud->channel_id = j["channel_id"];
         ud->room_id    = j["room_id"];
         ud->user_id    = j["user_id"];
@@ -162,16 +204,6 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                   << " room=" << ud->room_id << "\n";
     }
     else if (action == "send") {
-        if (!validate_schema_strict({{"action", "string"}, {"payload", "string"}})) {
-            nlohmann::json nack = {
-                {"action", "send_nack"},
-                {"reason", "invalid_send_schema"},
-                {"timestamp", current_timestamp()}
-            };
-            ws->send(nack.dump(), uWS::OpCode::TEXT);
-            return;
-        }
-
         if (ud->room_id.empty()) {
             nlohmann::json nack = {
                 {"action", "send_nack"},
@@ -202,15 +234,6 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                   << " payload=" << j["payload"] << "\n";
     }
     else if (action == "disconnect") {
-        if (!validate_schema_strict({{"action", "string"}})) {
-            nlohmann::json nack = {
-                {"action", "send_nack"},
-                {"reason", "invalid_disconnect_schema"},
-                {"timestamp", current_timestamp()}
-            };
-            ws->send(nack.dump(), uWS::OpCode::TEXT);
-            return;
-        }
         ws->close();
     }
     else {
@@ -220,6 +243,7 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
             {"timestamp", current_timestamp()}
         };
         ws->send(nack.dump(), uWS::OpCode::TEXT);
+        return;
     }
 }
 
