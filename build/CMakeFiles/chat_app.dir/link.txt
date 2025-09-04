@@ -1,0 +1,1 @@
+/usr/bin/c++     CMakeFiles/chat_app.dir/main.cpp.o  -o chat_app  /usr/local/lib/uSockets.a -lssl -lcrypto -lz -lpthread 
