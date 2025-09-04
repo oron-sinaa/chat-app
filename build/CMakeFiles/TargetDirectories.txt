@@ -1,3 +1,0 @@
-/home/dev-11/components/chat/build/CMakeFiles/rebuild_cache.dir
-/home/dev-11/components/chat/build/CMakeFiles/edit_cache.dir
-/home/dev-11/components/chat/build/CMakeFiles/chat_app.dir
