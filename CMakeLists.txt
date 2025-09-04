@@ -4,8 +4,10 @@ project(ChatApp LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include_directories(include)
+
 add_executable(chat_app
-    main.cpp
+    server.cpp
 )
 
 target_include_directories(chat_app PRIVATE
