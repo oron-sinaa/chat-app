@@ -74,7 +74,7 @@ void broadcast(const std::string &channel,
     }
 }
 
-// ---- Handle incoming messages ----
+// ---- Handle incoming messages with strict schema validation ----
 void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                    std::string_view raw)
 {
@@ -97,21 +97,48 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
     auto j = nlohmann::json::parse(raw, nullptr, false);
     if (j.is_discarded()) {
         std::cerr << "[WARN] Invalid JSON\n";
+        nlohmann::json nack = {
+            {"action", "send_nack"},
+            {"reason", "invalid_json"},
+            {"timestamp", current_timestamp()}
+        };
+        ws->send(nack.dump(), uWS::OpCode::TEXT);
         return;
     }
 
     auto *ud = ws->getUserData();
     std::string action = j.value("action", "");
 
+    // ---- Strict schema validation helper ----
+    auto validate_schema_strict = [&](const std::initializer_list<std::pair<std::string, std::string>> &fields) -> bool {
+        if (j.size() != fields.size()) return false;  // must have exactly required number of keys
+        for (auto &[key, type] : fields) {
+            if (!j.contains(key)) return false;
+            if (type == "string" && !j[key].is_string()) return false;
+            if (type == "object" && !j[key].is_object()) return false;
+            if (type == "array" && !j[key].is_array()) return false;
+        }
+        return true;
+    };
+
+    // ---- Validate schema per action ----
     if (action == "join") {
+        if (!validate_schema_strict({{"action", "string"}, {"user_id", "string"}, {"channel_id", "string"}, {"room_id", "string"}})) {
+            nlohmann::json nack = {
+                {"action", "send_nack"},
+                {"reason", "invalid_join_schema"},
+                {"timestamp", current_timestamp()}
+            };
+            ws->send(nack.dump(), uWS::OpCode::TEXT);
+            return;
+        }
+
         ud->channel_id = j["channel_id"];
         ud->room_id    = j["room_id"];
         ud->user_id    = j["user_id"];
 
-        // Store ws in room_map
         room_map[ud->channel_id][ud->room_id].insert(ws);
 
-        // Send ack with history
         nlohmann::json ack = {
             {"action", "join_ack"},
             {"channel_id", ud->channel_id},
@@ -122,7 +149,6 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
         };
         ws->send(ack.dump(), uWS::OpCode::TEXT);
 
-        // Notify others
         nlohmann::json notify = {
             {"event", "user_joined"},
             {"user_id", ud->user_id},
@@ -136,6 +162,16 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                   << " room=" << ud->room_id << "\n";
     }
     else if (action == "send") {
+        if (!validate_schema_strict({{"action", "string"}, {"payload", "string"}})) {
+            nlohmann::json nack = {
+                {"action", "send_nack"},
+                {"reason", "invalid_send_schema"},
+                {"timestamp", current_timestamp()}
+            };
+            ws->send(nack.dump(), uWS::OpCode::TEXT);
+            return;
+        }
+
         if (ud->room_id.empty()) {
             nlohmann::json nack = {
                 {"action", "send_nack"},
@@ -149,7 +185,7 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
         nlohmann::json bmsg = {
             {"event", "broadcast"},
             {"payload", j["payload"]},
-            {"user_id", ud->user_id}, // user_id from stored data
+            {"user_id", ud->user_id},
             {"channel_id", ud->channel_id},
             {"room_id", ud->room_id}
         };
@@ -166,7 +202,24 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                   << " payload=" << j["payload"] << "\n";
     }
     else if (action == "disconnect") {
+        if (!validate_schema_strict({{"action", "string"}})) {
+            nlohmann::json nack = {
+                {"action", "send_nack"},
+                {"reason", "invalid_disconnect_schema"},
+                {"timestamp", current_timestamp()}
+            };
+            ws->send(nack.dump(), uWS::OpCode::TEXT);
+            return;
+        }
         ws->close();
+    }
+    else {
+        nlohmann::json nack = {
+            {"action", "send_nack"},
+            {"reason", "unknown_action"},
+            {"timestamp", current_timestamp()}
+        };
+        ws->send(nack.dump(), uWS::OpCode::TEXT);
     }
 }
 
