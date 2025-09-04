@@ -29,7 +29,7 @@ std::unordered_map<
     std::string,
     std::unordered_map<
         std::string,
-        std::unordered_set<uWS::WebSocket<false, true, PerSocketData> *>
+        std::unordered_set<uWS::WebSocket<false, true, PerSocketData>*>
     >
 > room_map;
 
@@ -66,6 +66,9 @@ void broadcast(const std::string &channel,
     auto &conns = room_map[channel][room];
     for (auto *ws : conns) {
         if (ws != exclude) {
+            auto *ud = ws->getUserData();
+            // Use stored user_id for outgoing messages
+            msg["user_id"] = ud->user_id;
             ws->send(dump, uWS::OpCode::TEXT);
         }
     }
@@ -77,9 +80,9 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
 {
     constexpr size_t MAX_CLIENT_MSG = 512;
 
-    // --- Validate message length first ---
+    // --- Validate message length ---
     if (raw.size() > MAX_CLIENT_MSG) {
-        std::cerr << "[WARN] Message rejected: exceeds " 
+        std::cerr << "[WARN] Message rejected: exceeds "
                   << MAX_CLIENT_MSG << " bytes (" << raw.size() << " bytes)\n";
         nlohmann::json nack = {
             {"action", "send_nack"},
@@ -97,16 +100,18 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
         return;
     }
 
-    std::string action = j.value("action", "");
     auto *ud = ws->getUserData();
+    std::string action = j.value("action", "");
 
     if (action == "join") {
         ud->channel_id = j["channel_id"];
         ud->room_id    = j["room_id"];
         ud->user_id    = j["user_id"];
 
+        // Store ws in room_map
         room_map[ud->channel_id][ud->room_id].insert(ws);
 
+        // Send ack with history
         nlohmann::json ack = {
             {"action", "join_ack"},
             {"channel_id", ud->channel_id},
@@ -117,6 +122,7 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
         };
         ws->send(ack.dump(), uWS::OpCode::TEXT);
 
+        // Notify others
         nlohmann::json notify = {
             {"event", "user_joined"},
             {"user_id", ud->user_id},
@@ -129,7 +135,6 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                   << " joined channel=" << ud->channel_id
                   << " room=" << ud->room_id << "\n";
     }
-
     else if (action == "send") {
         if (ud->room_id.empty()) {
             nlohmann::json nack = {
@@ -144,7 +149,7 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
         nlohmann::json bmsg = {
             {"event", "broadcast"},
             {"payload", j["payload"]},
-            {"user_id", ud->user_id},
+            {"user_id", ud->user_id}, // user_id from stored data
             {"channel_id", ud->channel_id},
             {"room_id", ud->room_id}
         };
@@ -160,7 +165,6 @@ void handleMessage(uWS::WebSocket<false, true, PerSocketData> *ws,
                   << " room=" << ud->room_id
                   << " payload=" << j["payload"] << "\n";
     }
-
     else if (action == "disconnect") {
         ws->close();
     }
@@ -182,6 +186,7 @@ void sigint_handler(int) {
     }
 }
 
+// ---- Main ----
 int main(int argc, char* argv[]) {
     std::signal(SIGINT, sigint_handler);
 
@@ -208,7 +213,6 @@ int main(int argc, char* argv[]) {
 
         .close = [](auto *ws, int /*code*/, std::string_view /*message*/) {
             auto *ud = ws->getUserData();
-
             if (!ud->room_id.empty()) {
                 auto &connections = room_map[ud->channel_id][ud->room_id];
                 connections.erase(ws);
@@ -230,7 +234,6 @@ int main(int argc, char* argv[]) {
             }
         }
     })
-
     .listen(port, [port](auto *listen_socket) {
         if (listen_socket) {
             std::cout << "[INFO] Listening on ws://localhost:" << port << ENDPOINT << "\n";
@@ -238,6 +241,5 @@ int main(int argc, char* argv[]) {
             std::cerr << "[ERROR] Failed to listen on port " << port << "\n";
         }
     })
-
     .run();
 }

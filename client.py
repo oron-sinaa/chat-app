@@ -36,7 +36,7 @@ async def chat_client():
                 if text.lower() == "/quit":
                     await websocket.send(json.dumps({"action": "disconnect"}))
                     break
-                msg = {"action": "send", "payload": text, "user_id": user_id}
+                msg = {"action": "send", "payload": text}
                 await websocket.send(json.dumps(msg))
                 print(f">>> Sent: {msg}")
 

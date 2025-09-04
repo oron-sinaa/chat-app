@@ -23,3 +23,10 @@ RUN cd /workspace/uWebSockets/uSockets \
     && make \
     && make install
 
+RUN cd /workspace \
+    && mkdir build \
+    && cd build \
+    && cmake .. \
+    && make
+
+ENTRYPOINT ["./workspace/build/chat_app"]
