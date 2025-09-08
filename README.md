@@ -28,23 +28,27 @@ The architecture is designed to be modular, low-footprint, and easily extendable
 
 All communication is performed using **JSON messages** over WebSocket.
 
-### 1. Client Requests
+---
 
-#### `join`
+# 1. Client Requests
+
+## `join`
 Used to join a channel and room.
 
 **Request:**
-
+```
 {
   "action": "join",
   "user_id": "user123",
   "channel_id": "general",
   "room_id": "room1"
 }
+```
 
 **Responses:**
 
-`ACK`
+> `ACK`
+```
 {
   "action": "join_ack",
   "user_id": "user123",
@@ -53,26 +57,31 @@ Used to join a channel and room.
   "messages": [ /* previous messages in the room */ ],
   "timestamp": "2025-09-04T12:00:00.123Z"
 }
+```
 
-`NACK`
+> `NACK`
+```
 {
   "action": "join_nack",
   "reason": "already_connected",
   "timestamp": "2025-09-04T12:00:00.123Z"
 }
+```
 
-#### `send`
+## `send`
 Used to send a message to the current room.
-
+```
 **Request:**
 {
   "action": "send",
   "payload": "Hello everyone!"
 }
+```
 
 **Responses:**
 
-`Broadcast message (to all room participants except sender)`
+> `Broadcast`
+```
 {
   "event": "broadcast",
   "payload": "Hello everyone!",
@@ -81,26 +90,31 @@ Used to send a message to the current room.
   "room_id": "room1",
   "timestamp": "2025-09-04T12:01:00.456Z"
 }
+```
 
-`Send NACK (if rate-limited, invalid JSON, or not in room)`
+> `NACK`
+```
 {
   "action": "send_nack",
   "reason": "rate_limited",
   "timestamp": "2025-09-04T12:01:00.456Z"
 }
+```
 
-#### `disconnect`
+## `disconnect`
 Request to voluntarily disconnect.
 
 **Request:**
-
+```
 {
   "action": "disconnect"
 }
+```
 
 **Responses:**
 
 `Closes the WebSocket and broadcasts a disconnected event to all participants in the same room`
+```
 {
   "event": "disconnected",
   "user_id": "user123",
@@ -108,14 +122,14 @@ Request to voluntarily disconnect.
   "room_id": "room1",
   "timestamp": "2025-09-04T12:02:00.789Z"
 }
-
+```
 
 ---
 
-### 2. Server Notifications
+# 2. Server Notifications
 
 #### `User joined a room`
-
+```
 {
   "event": "user_joined",
   "user_id": "user123",
@@ -123,9 +137,10 @@ Request to voluntarily disconnect.
   "room_id": "room1",
   "timestamp": "2025-09-04T12:00:01.123Z"
 }
+```
 
 #### `User disconnected`
-
+```
 {
   "event": "disconnected",
   "user_id": "user123",
@@ -133,3 +148,4 @@ Request to voluntarily disconnect.
   "room_id": "room1",
   "timestamp": "2025-09-04T12:02:00.789Z"
 }
+```
