@@ -17,6 +17,7 @@ void sigint_handler(int) {
 }
 
 int main(int argc, char* argv[]) {
+    std::setvbuf(stdout, NULL, _IONBF, 0);
     std::signal(SIGINT, sigint_handler);
 
     int port = DEFAULT_PORT;

@@ -15,6 +15,6 @@ inline std::string current_timestamp() {
     return oss.str();
 }
 
-#define LOG_INFO(msg)  std::cout << "[" << current_timestamp() << "][INFO] " << msg << "\n"
-#define LOG_WARN(msg)  std::cerr << "[" << current_timestamp() << "][WARN] " << msg << "\n"
-#define LOG_DEBUG(msg) std::cout << "[" << current_timestamp() << "][DEBUG] " << msg << "\n"
+#define LOG_INFO(msg)  std::cout << "[" << current_timestamp() << "][INFO] " << msg << std::endl
+#define LOG_WARN(msg)  std::cerr << "[" << current_timestamp() << "][WARN] " << msg << std::endl
+#define LOG_DEBUG(msg) std::cout << "[" << current_timestamp() << "][DEBUG] " << msg << std::endl
