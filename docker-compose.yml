@@ -1,6 +1,6 @@
 services:
   chat:
     container_name: chat
-    image: chat-app:latest
+    image: ${CHAT_IMAGE_NAME}:${CHAT_IMAGE_PORT}
     ports:
       - ${CHAT_PORT}:9003
