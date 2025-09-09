@@ -24,6 +24,21 @@ The architecture is designed to be modular, low-footprint, and easily extendable
 
 ---
 
+## Installation
+
+- docker build -t chat:latest .
+- docker compose up -d
+
+
+---
+
+## Test
+
+- client.py 01 pewdiepie general 9003
+
+
+---
+
 ## Client-Server Communication
 
 All communication is performed using **JSON messages** over WebSocket.
