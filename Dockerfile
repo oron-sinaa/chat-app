@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:22.04 AS helper
 
 RUN apt update
 
@@ -6,7 +6,8 @@ RUN apt install -yqq \
     nlohmann-json3-dev \
     build-essential \
     cmake \
-    zlib1g-dev
+    zlib1g-dev \
+    libssl-dev
 
 WORKDIR /workspace
 
@@ -29,4 +30,8 @@ RUN cd /workspace \
     && cmake .. \
     && make
 
-ENTRYPOINT ["./workspace/build/chat_app"]
+FROM ubuntu:22.04 AS release
+
+COPY --from=helper /workspace/build/chat_app /workspace/build/chat_app
+
+ENTRYPOINT ["/workspace/build/chat_app"]
