@@ -15,6 +15,8 @@ WORKDIR /workspace
 COPY . .
 
 RUN git submodule add https://github.com/uNetworking/uWebSockets.git uWebSockets \
+    && git add .gitmodules uWebSockets \
+    && git submodule update --init uWebSockets \
     && cd uWebSockets \
     && git submodule update --init uSockets
 
