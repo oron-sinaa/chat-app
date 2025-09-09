@@ -7,11 +7,16 @@ RUN apt install -yqq \
     build-essential \
     cmake \
     zlib1g-dev \
-    libssl-dev
+    libssl-dev \
+    git
 
 WORKDIR /workspace
 
 COPY . .
+
+RUN git submodule add https://github.com/uNetworking/uWebSockets.git uWebSockets \
+    && cd uWebSockets \
+    && git submodule update --init uSockets
 
 RUN cd /workspace/uWebSockets/uSockets \
     && make \
