@@ -70,8 +70,9 @@ Used to join a channel and room.
 
 ## `send`
 Used to send a message to the current room.
-```
+
 **Request:**
+```
 {
   "action": "send",
   "payload": "Hello everyone!"
